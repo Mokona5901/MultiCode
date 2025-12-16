@@ -69,10 +69,13 @@ async function loadFiles(parentId = null) {
             });
         }
         renderFileTree();
-        const rootFiles = Object.values(fileMap).filter(file => !file.parentId);
-        if (rootFiles.length > 0 && !currentFile) {
-            selectFile(rootFiles[0]);
-        }
+    const rootFiles = Object.values(fileMap).filter(file => !file.parentId);
+    if (rootFiles.length > 0 && !currentFile) {
+        selectFile(rootFiles[0]);
+    } else if (rootFiles.length === 0 && !currentFile) {
+        editorElement.style.display = 'none';
+        editorHeader.textContent = 'Select a file to edit';
+    }
     } catch (error) {
         console.error('Erreur:', error);
     }

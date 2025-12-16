@@ -10,11 +10,9 @@ const path = require('path');
 const { MongoClient, ObjectId } = require('mongodb');
 const MongoStore = require('connect-mongo');
 const cors = require('cors');
-const crypto = require('crypto');
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
-
 const PORT = 6767;
 
 app.use((req, res, next) => {
