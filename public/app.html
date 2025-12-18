@@ -8,6 +8,7 @@
     <link rel="icon" type="image/svg+xml" href="public/favicon.svg">
     
     <!-- CodeMirror scripts and stylesheet -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5/theme/material-palenight.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.js"></script>
     
@@ -53,6 +54,7 @@
             <div class="session-info" id="sessionInfo" style="display: none;">
                 <span id="sessionId" style="display: none;"></span>
             </div>
+            <button class="export-btn" onclick="exportArchive()">Export as .zip</button>
             <button class="invite-btn" id="inviteBtn" style="display: none;" onclick="inviteToSession()">Invite</button>
             <button class="logout-btn" onclick="logout()">Logout</button>
         </div>
@@ -60,16 +62,33 @@
     <div class="container">
         <div class="sidebar">
             <div class="sidebar-header">
-                <button onclick="createFile()">+ File</button>
-                <button onclick="createFolder()">+ Folder</button>
+                <div class="dropdown">
+                    <button class="dropdown-btn">+</button>
+                    <div class="dropdown-content">
+                        <button onclick="createFile()">File</button>
+                        <button onclick="createFolder()">Folder</button>
+                    </div>
+                </div>
+                <div class="dropdown">
+                    <button class="dropdown-btn">Import</button>
+                    <div class="dropdown-content">
+                        <button onclick="importFile()">File</button>
+                        <button onclick="importArchive()">Archive</button>
+                        <button onclick="importGithub()">GitHub Repo</button>
+                    </div>
+                </div>
             </div>
             <ul class="file-tree" id="fileTree"></ul>
         </div>
         <div class="editor-area">
             <div class="editor-header" id="editorHeader">Select a file</div>
             <div id="editor"></div>
+            <div id="imageViewer" style="display: none;"></div>
         </div>
     </div>
     <script src="app.js"></script>
+    <div id="importOverlay" class="import-overlay" style="display: none;">
+        <div class="import-message">Importing...</div>
+    </div>
 </body>
 </html>

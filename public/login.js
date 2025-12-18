@@ -16,10 +16,10 @@
                         window.location.href = '/app';
                     }
                 } else {
-                    alert('Identifiants invalides');
+                    alert('Invalid username or password');
                 }
             } catch (error) {
-                console.error('Erreur de connexion:', error);
-                alert('Erreur lors de la connexion');
+                console.error('Network error:', error);
+                alert('Error during login');
             }
         });
