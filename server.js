@@ -19,6 +19,7 @@ const dmp = new diff_match_patch.diff_match_patch();
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
+const PORT = process.env.PORT || 3000;
 
 // Track current content and save timeouts per file
 const currentContent = {};
@@ -935,4 +936,4 @@ io.on('connection', (socket) => {
 process.on('uncaughtException', (err) => console.error('Uncaught Exception:', err));
 process.on('unhandledRejection', (reason, promise) => console.error('Unhandled Rejection at:', promise, 'reason:', reason));
 
-server.listen(process.env.PORT || 6767, () => console.log(`Server running on http://localhost:${process.env.PORT || 6767}`));
+server.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
