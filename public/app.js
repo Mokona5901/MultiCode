@@ -26,7 +26,19 @@ function updateEditorPadding(lineCount) {
 
 socket.on("connect", () => {
     loadFiles();
+    saveCurrentSession();
 });
+
+function saveCurrentSession() {
+    if (currentSessionId) {
+        fetch('/api/sessions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sessionId: currentSessionId })
+        }).catch(err => console.error('Error saving session:', err));
+    }
+}
+
 
 socket.on("disconnect", () => {
 
@@ -925,14 +937,37 @@ function updateSessionUI() {
     const sessionInfo = document.getElementById('sessionInfo');
     const sessionIdSpan = document.getElementById('sessionId');
     const inviteBtn = document.getElementById('inviteBtn');
+    const settingsBtn = document.getElementById('settingsBtn');
 
     if (currentSessionId) {
         sessionIdSpan.textContent = currentSessionId.slice(0, 8) + '...';
         sessionInfo.style.display = 'inline-block';
         inviteBtn.style.display = 'inline-block';
+        
+        // Fetch session to check ownership
+        fetch(`/api/sessions/${currentSessionId}`)
+            .then(response => {
+                if (!response.ok) return null;
+                return response.json();
+            })
+            .then(session => {
+                if (session) {
+                    // Get current username
+                    fetch('/api/user')
+                        .then(r => r.json())
+                        .then(user => {
+                            if (user && session.owner === user.username) {
+                                settingsBtn.style.display = 'inline-block';
+                            } else {
+                                settingsBtn.style.display = 'none';
+                            }
+                        });
+                }
+            });
     } else {
         sessionInfo.style.display = 'none';
         inviteBtn.style.display = 'none';
+        settingsBtn.style.display = 'none';
     }
 }
 
@@ -945,6 +980,76 @@ function inviteToSession() {
     navigator.clipboard.writeText(url).then(() => {
         alert('Invitation link copied to clipboard !');
     });
+}
+
+function openSessionSettings() {
+    const modal = document.getElementById('sessionSettingsModal');
+    const input = document.getElementById('appSessionNameInput');
+    
+    if (!currentSessionId) {
+        alert('No active session');
+        return;
+    }
+
+    // Fetch current session details
+    fetch(`/api/sessions/${currentSessionId}`)
+        .then(response => {
+            if (!response.ok) throw new Error('Failed to fetch session');
+            return response.json();
+        })
+        .then(session => {
+            input.value = session.sessionName || '';
+            modal.style.display = 'block';
+        })
+        .catch(err => {
+            console.error('Error fetching session:', err);
+            input.value = '';
+            modal.style.display = 'block';
+        });
+}
+
+function closeSessionSettings() {
+    const modal = document.getElementById('sessionSettingsModal');
+    modal.style.display = 'none';
+}
+
+async function saveAppSessionSettings() {
+    const newName = document.getElementById('appSessionNameInput').value.trim();
+    if (!newName) {
+        alert('Session name cannot be empty');
+        return;
+    }
+
+    if (!currentSessionId) {
+        alert('No active session');
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/sessions/${currentSessionId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sessionName: newName })
+        });
+
+        if (response.ok) {
+            closeSessionSettings();
+            alert('Session name updated successfully!');
+        } else {
+            alert('Failed to update session name');
+        }
+    } catch (err) {
+        console.error('Error updating session:', err);
+        alert('Error updating session');
+    }
+}
+
+// Close modal when clicking outside
+window.onclick = function(event) {
+    const modal = document.getElementById('sessionSettingsModal');
+    if (event.target === modal) {
+        closeSessionSettings();
+    }
 }
 
 let draggedElement = null;
@@ -1100,6 +1205,12 @@ if (sessionParam) {
 }
 
 loadFiles();
+
+// Handle MultiCode logo click
+document.getElementById('multicodeLogo').addEventListener('click', () => {
+    window.location.href = '/';
+});
+
 
 
 

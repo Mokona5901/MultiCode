@@ -14,11 +14,13 @@ const multer = require('multer');
 const AdmZip = require('adm-zip');
 const { Octokit } = require('@octokit/rest');
 const diff_match_patch = require('diff-match-patch');
+const { uniqueNamesGenerator, adjectives, names } = require('unique-names-generator');
 const dmp = new diff_match_patch.diff_match_patch();
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 const PORT = 6767;
+const { createWakeUpServer } = require('@koding88/wakeup-render');
 
 // Track current content and save timeouts per file
 const currentContent = {};
@@ -107,6 +109,15 @@ app.get('/logout', (req, res) => {
     res.redirect('/');
   });
 });
+
+// Get current user information
+app.get('/api/user', (req, res) => {
+  if (!req.isAuthenticated()) {
+    return res.status(401).json({ error: 'Not authenticated' });
+  }
+  res.json({ username: req.user.username });
+});
+
 
 app.post("/api/files", async (req, res) => {
   if (!req.isAuthenticated()) return res.status(401).send('Unauthorized');
@@ -576,7 +587,262 @@ app.get('/api/export-archive', async (req, res) => {
 
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.static(path.join(__dirname, '/')));
+
+// Create or update a persistent session
+app.post('/api/sessions', async (req, res) => {
+  if (!req.isAuthenticated()) return res.status(401).send('Unauthorized');
+  try {
+    const { sessionId, sessionName } = req.body;
+    const username = req.user.username;
+
+    // Check if session already exists
+    const existingSession = await sessionsCollection.findOne({ sessionId });
+
+    const now = new Date();
+    const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    
+    // Only update the time, don't change name or date if session exists
+    const updateData = {
+      updatedAt: new Date()
+    };
+
+    // If session doesn't exist, set name, date, and other fields
+    if (!existingSession) {
+      const dateStr = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`;
+      updateData.sessionName = sessionName || 'Session';
+      updateData.sessionDate = dateStr;
+      updateData.sessionTime = timeStr;
+      updateData.owner = username;
+      updateData.participants = [username];
+      updateData.createdAt = new Date();
+    } else {
+      // Session exists, only update the time
+      updateData.sessionTime = timeStr;
+      if (!existingSession.participants) {
+        updateData.participants = [existingSession.owner || existingSession.username];
+      }
+    }
+
+    // Use $addToSet to add user to participants without duplicates
+    const updateOps = { $set: updateData };
+    if (existingSession) {
+      updateOps.$addToSet = { participants: username };
+    }
+
+    const result = await sessionsCollection.updateOne(
+      { sessionId },
+      updateOps,
+      { upsert: true }
+    );
+
+    res.json({ success: true, sessionId });
+  } catch (err) {
+    console.error('Error saving session:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Create a new session
+app.post('/api/sessions/create-new', async (req, res) => {
+  if (!req.isAuthenticated()) return res.status(401).send('Unauthorized');
+  try {
+    const username = req.user.username;
+    const sessionId = require('crypto').randomUUID();
+    
+    const now = new Date();
+    const dateStr = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`;
+    const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    
+    const generatedName = uniqueNamesGenerator({
+      dictionaries: [adjectives, names],
+      separator: ' '
+    });
+
+    const session = {
+      sessionId,
+      sessionName: generatedName,
+      sessionDate: dateStr,
+      sessionTime: timeStr,
+      owner: username,
+      participants: [username],
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+
+    await sessionsCollection.insertOne(session);
+    res.json({ sessionId });
+  } catch (err) {
+    console.error('Error creating session:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get all sessions for the logged-in user (owned or participated)
+app.get('/api/sessions', async (req, res) => {
+  if (!req.isAuthenticated()) return res.status(401).send('Unauthorized');
+  try {
+    const username = req.user.username;
+    const sessions = await sessionsCollection
+      .find({
+        $or: [
+          { owner: username },
+          { participants: username }
+        ]
+      })
+      .sort({ updatedAt: -1 })
+      .toArray();
+
+    res.json(sessions);
+  } catch (err) {
+    console.error('Error fetching sessions:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get a specific session
+app.get('/api/sessions/:sessionId', async (req, res) => {
+  if (!req.isAuthenticated()) return res.status(401).send('Unauthorized');
+  try {
+    const { sessionId } = req.params;
+    const username = req.user.username;
+
+    const session = await sessionsCollection.findOne({
+      sessionId,
+      $or: [
+        { owner: username },
+        { participants: username }
+      ]
+    });
+
+    if (!session) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+
+    res.json(session);
+  } catch (err) {
+    console.error('Error fetching session:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Generate a unique session name
+app.get('/api/sessions/generate-name', (req, res) => {
+  try {
+    const generatedName = uniqueNamesGenerator({
+      dictionaries: [adjectives, names],
+      separator: ' '
+    });
+    res.json({ sessionName: generatedName });
+  } catch (err) {
+    console.error('Error generating name:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Rename a session
+app.put('/api/sessions/:sessionId', async (req, res) => {
+  if (!req.isAuthenticated()) return res.status(401).send('Unauthorized');
+  try {
+    const { sessionId } = req.params;
+    const { sessionName } = req.body;
+    const username = req.user.username;
+
+    // Check if user is owner or participant
+    const session = await sessionsCollection.findOne({ sessionId });
+    if (!session) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+
+    const isOwner = session.owner === username;
+    const isParticipant = session.participants && session.participants.includes(username);
+
+    if (!isOwner && !isParticipant) {
+      return res.status(403).json({ error: 'Permission denied' });
+    }
+
+    const result = await sessionsCollection.updateOne(
+      { sessionId },
+      { $set: { sessionName, updatedAt: new Date() } }
+    );
+
+    if (result.matchedCount === 0) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Error renaming session:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Delete a session
+app.delete('/api/sessions/:sessionId', async (req, res) => {
+  if (!req.isAuthenticated()) return res.status(401).send('Unauthorized');
+  try {
+    const { sessionId } = req.params;
+    const username = req.user.username;
+
+    // Check if user is owner of the session
+    const session = await sessionsCollection.findOne({ sessionId });
+    if (!session) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+
+    if (session.owner !== username) {
+      return res.status(403).json({ error: 'Only the session owner can delete it' });
+    }
+
+    const result = await sessionsCollection.deleteOne({
+      sessionId
+    });
+
+    if (result.deletedCount === 0) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+
+    // Also delete all files associated with this session
+    await filesCollection.deleteMany({ sessionId });
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Error deleting session:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Leave a session (for participants only)
+app.post('/api/sessions/:sessionId/leave', async (req, res) => {
+  if (!req.isAuthenticated()) return res.status(401).send('Unauthorized');
+  try {
+    const { sessionId } = req.params;
+    const username = req.user.username;
+
+    // Check if session exists
+    const session = await sessionsCollection.findOne({ sessionId });
+    if (!session) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+
+    // Remove user from participants array
+    const result = await sessionsCollection.updateOne(
+      { sessionId },
+      { $pull: { participants: username } }
+    );
+
+    if (result.modifiedCount === 0) {
+      return res.status(400).json({ error: 'User not found in session participants' });
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Error leaving session:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public/index.html')));
+
 app.get('/app', (req, res) => {
   if (!req.isAuthenticated()) return res.redirect('/login');
   res.sendFile(path.join(__dirname, 'public/app.html'));
@@ -672,3 +938,11 @@ process.on('uncaughtException', (err) => console.error('Uncaught Exception:', er
 process.on('unhandledRejection', (reason, promise) => console.error('Unhandled Rejection at:', promise, 'reason:', reason));
 
 server.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
+
+const wakeupConfig = {
+    port: process.env.WAKEUP_PORT || 4000,
+    pingUrl: process.env.PING_URL,
+    interval: 30000
+};
+
+createWakeUpServer(wakeupConfig);

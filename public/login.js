@@ -13,7 +13,7 @@
                 if (response.ok) {
                     const data = await response.json();
                     if (data.success) {
-                        window.location.href = '/app';
+                        window.location.href = '/';
                     }
                 } else {
                     alert('Invalid username or password');

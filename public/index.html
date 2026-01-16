@@ -6,15 +6,388 @@
     <title>MultiCode - Home</title>
     <link rel="stylesheet" href="index.css">
     <link rel="icon" type="image/svg+xml" href="public/favicon.svg">
+    <style>
+        .sessions-container {
+            display: none;
+            margin-top: 30px;
+            text-align: left;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        .sessions-container h2 {
+            margin-bottom: 20px;
+        }
+        .session-item {
+            background: #f5f5f5;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 5px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            transition: background 0.3s;
+            min-height: 80px;
+        }
+        .session-item:hover {
+            background: #e8e8e8;
+        }
+        .session-info {
+            flex: 1;
+        }
+        .session-name {
+            color: #666;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        .session-id {
+            font-size: 0.9em;
+            color: #666;
+        }
+        .session-owner {
+            font-size: 0.85em;
+            color: #999;
+            margin-top: 3px;
+        }
+        .session-actions {
+            display: flex;
+            gap: 10px;
+        }
+        .session-btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9em;
+        }
+        .join-btn {
+            background: #4CAF50;
+            color: white;
+        }
+        .join-btn:hover {
+            background: #45a049;
+        }
+        .delete-btn {
+            background: #f44336;
+            color: white;
+        }
+        .delete-btn:hover {
+            background: #da190b;
+        }
+        .settings-btn {
+            background: #2196F3;
+            color: white;
+        }
+        .settings-btn:hover {
+            background: #0b7dda;
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.4);
+        }
+        .modal-content {
+            background-color: #fefefe;
+            margin: 10% auto;
+            padding: 20px;
+            border: 1px solid #888;
+            border-radius: 8px;
+            width: 80%;
+            max-width: 400px;
+        }
+        .modal-header {
+            font-size: 1.3em;
+            font-weight: bold;
+            margin-bottom: 20px;
+        }
+        .modal-close {
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        .modal-close:hover {
+            color: #999;
+        }
+        .modal-input {
+            width: 100%;
+            padding: 10px;
+            margin: 10px 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        .modal-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+            justify-content: flex-end;
+        }
+        .modal-btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.95em;
+        }
+        .modal-save-btn {
+            background: #4CAF50;
+            color: white;
+        }
+        .modal-save-btn:hover {
+            background: #45a049;
+        }
+        .modal-cancel-btn {
+            background: #888;
+            color: white;
+        }
+        .modal-cancel-btn:hover {
+            background: #666;
+        }
+    </style>
+
 </head>
 <body>
     <div class="container">
         <h1>MultiCode</h1>
         <p>Live code collaboration for dev teams</p>
-        <div class="buttons">
+        <div class="buttons" id="authButtons">
             <button class="login-btn" onclick="window.location.href='/login'">Login</button>
             <button class="register-btn" onclick="window.location.href='/register'">Register</button>
         </div>
+        <div class="sessions-container" id="sessionsContainer">
+            <h2>Your Sessions</h2>
+            <div id="sessionsList"></div>
+            <button class="login-btn" id="newSessionBtn" onclick="handleNewSessionClick()" style="margin-top: 20px; width: 100%;">New Session</button>
+            <button class="login-btn" onclick="logout()" style="margin-top: 10px; width: 100%; background: #666;">Logout</button>
+        </div>
     </div>
+
+    <!-- Settings Modal -->
+    <div id="settingsModal" class="modal">
+        <div class="modal-content">
+            <span class="modal-close" onclick="closeSessionSettings()">&times;</span>
+            <div class="modal-header">Session Settings</div>
+            <label>Session Name:</label>
+            <input type="text" id="sessionNameInput" class="modal-input" placeholder="Enter new session name">
+            <div class="modal-buttons">
+                <button class="modal-btn modal-cancel-btn" onclick="closeSessionSettings()">Cancel</button>
+                <button class="modal-btn modal-save-btn" onclick="saveSessionSettings()">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentUsername = null;
+
+        async function checkAuth() {
+            try {
+                const response = await fetch('/api/user');
+                if (response.ok) {
+                    const user = await response.json();
+                    currentUsername = user.username;
+                    showSessionsUI(user.username);
+                } else {
+                    showAuthButtons();
+                }
+            } catch (err) {
+                showAuthButtons();
+            }
+        }
+
+        function showAuthButtons() {
+            document.getElementById('authButtons').style.display = 'block';
+            document.getElementById('sessionsContainer').style.display = 'none';
+        }
+
+        async function showSessionsUI(username) {
+            document.getElementById('authButtons').style.display = 'none';
+            document.getElementById('sessionsContainer').style.display = 'block';
+            await loadSessions();
+        }
+
+        async function loadSessions() {
+            try {
+                const response = await fetch('/api/sessions');
+                if (!response.ok) {
+                    console.error('Failed to load sessions');
+                    return;
+                }
+                const sessions = await response.json();
+                displaySessions(sessions);
+                // Store sessions globally for use in handleNewSessionClick
+                window.allSessions = sessions;
+            } catch (err) {
+                console.error('Error loading sessions:', err);
+            }
+        }
+
+        function handleNewSessionClick() {
+            createNewSession();
+        }
+
+        function displaySessions(sessions) {
+            const sessionsList = document.getElementById('sessionsList');
+            if (sessions.length === 0) {
+                sessionsList.innerHTML = '<p style="color: #999;">No sessions yet. Create one to get started!</p>';
+                return;
+            }
+
+            sessionsList.innerHTML = sessions.map(session => {
+                const isOwner = session.owner === currentUsername;
+                return `
+                <div class="session-item">
+                    <div class="session-info" onclick="joinSession('${session.sessionId}')">
+                        <div class="session-name">${escapeHtml(session.sessionName)}</div>
+                        <div class="session-id">${session.sessionDate} ${session.sessionTime}</div>
+                        <div class="session-owner">Owner: ${escapeHtml(session.owner)}</div>
+                    </div>
+                    <div class="session-actions" style="flex-direction: column; gap: 5px;">
+                        ${isOwner ? `
+                        <div style="display: flex; gap: 10px;">
+                            <button class="session-btn join-btn" onclick="joinSession('${session.sessionId}')">Join</button>
+                            <button class="session-btn settings-btn" onclick="openSessionSettings('${session.sessionId}', '${escapeHtml(session.sessionName)}')">Settings</button>
+                        </div>
+                        <button class="session-btn delete-btn" style="width: 100%;" onclick="deleteSession('${session.sessionId}')">Delete</button>
+                        ` : `
+                        <div style="display: flex; gap: 10px; transform: translateX(-80%);">
+                            <button class="session-btn join-btn" onclick="joinSession('${session.sessionId}')">Join</button>
+                        </div>
+                        <button class="session-btn delete-btn" style="width: 100%; transform: translateX(-87%);" onclick="leaveSession('${session.sessionId}')">Leave</button>
+                        `}
+                    </div>
+                </div>
+            `}).join('');
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        async function createNewSession() {
+            try {
+                const response = await fetch('/api/sessions/create-new', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                
+                if (response.ok) {
+                    const { sessionId } = await response.json();
+                    window.location.href = `/app?session=${sessionId}`;
+                } else {
+                    alert('Failed to create new session');
+                }
+            } catch (err) {
+                console.error('Error creating session:', err);
+                alert('Error creating new session');
+            }
+        }
+
+        function joinSession(sessionId) {
+            window.location.href = `/app?session=${sessionId}`;
+        }
+
+        async function leaveSession(sessionId) {
+            if (!confirm('Are you sure you want to leave this session?')) {
+                return;
+            }
+            try {
+                const response = await fetch(`/api/sessions/${sessionId}/leave`, {
+                    method: 'POST'
+                });
+                if (response.ok) {
+                    await loadSessions();
+                } else {
+                    alert('Failed to leave session');
+                }
+            } catch (err) {
+                console.error('Error leaving session:', err);
+                alert('Error leaving session');
+            }
+        }
+
+        async function deleteSession(sessionId) {
+            if (!confirm('Are you sure you want to delete this session and all its files?')) {
+                return;
+            }
+            try {
+                const response = await fetch(`/api/sessions/${sessionId}`, {
+                    method: 'DELETE'
+                });
+                if (response.ok) {
+                    await loadSessions();
+                } else {
+                    alert('Failed to delete session');
+                }
+            } catch (err) {
+                console.error('Error deleting session:', err);
+                alert('Error deleting session');
+            }
+        }
+
+        function logout() {
+            window.location.href = '/logout';
+        }
+
+        let currentSettingsSessionId = null;
+
+        function openSessionSettings(sessionId, sessionName) {
+            currentSettingsSessionId = sessionId;
+            document.getElementById('sessionNameInput').value = sessionName;
+            document.getElementById('settingsModal').style.display = 'block';
+        }
+
+        function closeSessionSettings() {
+            document.getElementById('settingsModal').style.display = 'none';
+            currentSettingsSessionId = null;
+        }
+
+        async function saveSessionSettings() {
+            if (!currentSettingsSessionId) return;
+            
+            const newName = document.getElementById('sessionNameInput').value.trim();
+            if (!newName) {
+                alert('Session name cannot be empty');
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/sessions/${currentSettingsSessionId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ sessionName: newName })
+                });
+
+                if (response.ok) {
+                    closeSessionSettings();
+                    await loadSessions();
+                } else {
+                    alert('Failed to save session settings');
+                }
+            } catch (err) {
+                console.error('Error saving session settings:', err);
+                alert('Error saving session settings');
+            }
+        }
+
+        // Close modal when clicking outside of it
+        window.onclick = function(event) {
+            const modal = document.getElementById('settingsModal');
+            if (event.target === modal) {
+                closeSessionSettings();
+            }
+        }
+
+        // Check authentication on page load
+        checkAuth();
+    </script>
 </body>
 </html>

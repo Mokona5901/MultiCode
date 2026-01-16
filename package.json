@@ -7,6 +7,7 @@
   "license": "ISC",
   "description": "Collaborative code editor",
   "dependencies": {
+    "@koding88/wakeup-render": "^1.0.0",
     "@octokit/rest": "^22.0.1",
     "adm-zip": "^0.5.16",
     "bcrypt": "^6.0.0",
@@ -24,6 +25,7 @@
     "passport-local": "^1.0.0",
     "socket.io": "^4.8.1",
     "streamifier": "^0.1.1",
+    "unique-names-generator": "^4.7.1",
     "yauzl": "^3.2.0"
   }
 }
