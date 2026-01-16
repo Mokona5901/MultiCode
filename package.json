@@ -7,7 +7,6 @@
   "license": "ISC",
   "description": "Collaborative code editor",
   "dependencies": {
-    "@koding88/wakeup-render": "^1.0.0",
     "@octokit/rest": "^22.0.1",
     "adm-zip": "^0.5.16",
     "bcrypt": "^6.0.0",

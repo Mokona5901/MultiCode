@@ -19,8 +19,6 @@ const dmp = new diff_match_patch.diff_match_patch();
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
-const PORT = 6767;
-const { createWakeUpServer } = require('@koding88/wakeup-render');
 
 // Track current content and save timeouts per file
 const currentContent = {};
@@ -937,12 +935,4 @@ io.on('connection', (socket) => {
 process.on('uncaughtException', (err) => console.error('Uncaught Exception:', err));
 process.on('unhandledRejection', (reason, promise) => console.error('Unhandled Rejection at:', promise, 'reason:', reason));
 
-server.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
-
-const wakeupConfig = {
-    port: process.env.WAKEUP_PORT || 4000,
-    pingUrl: process.env.PING_URL,
-    interval: 30000
-};
-
-createWakeUpServer(wakeupConfig);
+server.listen(process.env.PORT || 6767, () => console.log(`Server running on http://localhost:${process.env.PORT || 6767}`));
